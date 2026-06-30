@@ -1,0 +1,406 @@
+<?xml version="1.0"?>
+<!DOCTYPE riscos-prm PUBLIC "-//Gerph//DTD PRM documentation 1.03//EN"
+                            "http://gerph.org/dtd/103/prm.dtd">
+<riscos-prm>
+<chapter title="Allocate File Formats">
+<section title="Introduction and Overview">
+<p>
+The Allocate application stores an allocation request as a binary data file
+with RISC OS filetype <userinput>&amp;FB0</userinput>. The file contains the
+requestor's developer details followed by a sequence of allocation request
+objects. This chapter documents that file format, the related developer
+details file used by the application, and the text exports generated from the
+same data.
+</p>
+<p>
+The binary request file is intended to preserve a request while it is being
+edited or transferred between Allocate windows. The application can also
+generate a CSV export containing only reservation requests, a plain text
+reply-form template, and a text file suitable for email which combines a
+human-readable summary with a uuencoded copy of the binary request.
+</p>
+</section>
+
+<section title="Technical Details">
+<subsection title="Conventions">
+<p>
+All integer fields are written as native C <userinput>int</userinput> values
+by the historical implementation. In the supplied sources these are 32-bit
+little-endian values. Text fields are fixed-length byte arrays written exactly
+as stored in memory.
+</p>
+<p>
+Fixed-length text fields are not length-prefixed. The application initialises
+new structures to zero, then copies user text into them, so unused bytes are
+normally NUL padded. Readers should treat the last byte of each field as part
+of the stored field width rather than as guaranteed spare space.
+</p>
+<p>
+The request file magic is the eight ASCII bytes
+<userinput>ALLOCATE</userinput> with no terminator. Earlier notes in
+<filename type="unix">doc/FileFormat</filename> describe this as an
+8-character string; the implementation confirms that exactly eight bytes are
+stored.
+</p>
+</subsection>
+
+<subsection title="Binary Request File">
+<p>
+Allocate request files have RISC OS filetype <userinput>&amp;FB0</userinput>.
+They are written by the application's <userinput>Save request</userinput>
+operation and read when a request file is opened or dragged into an Allocate
+window.
+</p>
+
+<subsubsection title="Overall Layout">
+<p>
+<offset-table head-number="Offset" head-name="Name" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="magic" data-size="8">ASCII <userinput>ALLOCATE</userinput>, without a terminator.</offset>
+ <offset number="8" name="version" data-size="4">File format version multiplied by 100. The supplied implementation writes <userinput>100</userinput>.</offset>
+ <offset number="12" name="object_count" data-size="4">Number of request objects following the developer details block.</offset>
+ <offset number="16" name="developer_details" data-size="452">Developer details block; see the next subsection.</offset>
+ <offset number="468" name="objects" state="content">Sequence of <reference type="subsubsection" name="Object Records"/> entries.</offset>
+</offset-table>
+</p>
+</subsubsection>
+
+<subsubsection title="Developer Details Block">
+<p>
+The developer details block is stored inline in every binary request file.
+When a file is loaded, these details may optionally replace the current
+session details. The same structure is also used for the standalone details
+file described later in this chapter.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="name" data-size="40">Requestor name.</offset>
+ <offset number="40" name="company" data-size="50">Company or organisation name.</offset>
+ <offset number="90" name="developer_number" data-size="12">Developer number. The bundled help states that this field may be left blank.</offset>
+ <offset number="102" name="address1" data-size="50">First address line.</offset>
+ <offset number="152" name="address2" data-size="50">Second address line.</offset>
+ <offset number="202" name="address3" data-size="50">Third address line.</offset>
+ <offset number="252" name="address4" data-size="50">Fourth address line.</offset>
+ <offset number="302" name="phone" data-size="50">Telephone number.</offset>
+ <offset number="352" name="fax" data-size="50">Fax number.</offset>
+ <offset number="402" name="email" data-size="50">Email address.</offset>
+</offset-table>
+</p>
+</subsubsection>
+
+<subsubsection title="Object Records">
+<p>
+Each request object begins with a two-word header:
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="id" data-size="4">Object type identifier.</offset>
+ <offset number="4" name="size" data-size="4">Size in bytes of the object payload that follows, not including this header.</offset>
+ <offset number="8" name="payload" state="content">Object-specific data for the type named by <userinput>id</userinput>.</offset>
+</offset-table>
+</p>
+<p>
+The object identifiers are:
+</p>
+<p>
+<value-table head-number="ID" head-value="Object type">
+ <value number="0">SWI chunk</value>
+ <value number="1">Message block</value>
+ <value number="2">Reservation</value>
+ <value number="3">Filetype request</value>
+ <value number="4">Error block</value>
+ <value number="5">Podule allocation</value>
+ <value number="6">Draw tag block</value>
+ <value number="7">Draw object block</value>
+ <value number="8">Filing system</value>
+ <value number="9">Service call block</value>
+ <value number="10">Device number</value>
+</value-table>
+</p>
+</subsubsection>
+
+<subsubsection title="Object Payloads">
+<category title="SWI Chunk Object">
+<p>
+Requests a SWI chunk and its name prefix.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="prefix" data-size="20">Requested SWI prefix.</offset>
+ <offset number="20" name="description" data-size="100">Description of the module or use.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Message Block Object">
+<p>
+Requests a Wimp message block. The user interface exposes a mandatory
+<userinput>block required</userinput> tick, but the saved object stores only
+the description text.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="description" data-size="100">Description of the protocol or message usage.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Reservation Object">
+<p>
+Requests reservation of a name in one of the reservation namespaces supplied
+by the application's resource file.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="text" data-size="40">Name to reserve.</offset>
+ <offset number="40" name="type" data-size="20">Reservation class, such as <userinput>AppName</userinput> or <userinput>ModName</userinput>.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Filetype Object">
+<p>
+Requests a filetype. This is the only variable-length object type. Its payload
+begins with a fixed part followed by three embedded file blocks.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="appname" data-size="12">Application name associated with the filetype.</offset>
+ <offset number="12" name="fname" data-size="9">Requested filetype name.</offset>
+ <offset number="21" name="double_clicking" data-size="4">Boolean flag indicating whether double-click loading is supported.</offset>
+ <offset number="25" name="sprite_size" data-size="4">Size in bytes of the sprite file data.</offset>
+ <offset number="29" name="sprite_data" state="content">Sprite file contents. The user interface requires RISC OS filetype <userinput>&amp;FF9</userinput>.</offset>
+ <offset number="29+sprite_size" name="prod_desc_size" data-size="4">Size in bytes of the product description file.</offset>
+ <offset number="33+sprite_size" name="prod_desc_data" state="content">Product description file contents. The user interface requires filetype <userinput>&amp;FFF</userinput>.</offset>
+ <offset number="33+sprite_size+prod_desc_size" name="format_size" data-size="4">Size in bytes of the file format description file.</offset>
+ <offset number="37+sprite_size+prod_desc_size" name="format_data" state="content">File format description contents. The user interface requires filetype <userinput>&amp;FFF</userinput>.</offset>
+</offset-table>
+</p>
+<p>
+For this object only, the stored <userinput>size</userinput> field in the
+object header is the size of the serialised fixed part plus the three size
+words and the three variable-length payloads. It is not simply
+<userinput>sizeof(FileType)</userinput>.
+</p>
+</category>
+
+<category title="Error Block Object">
+<p>
+Requests an error block. As with message, service, Draw tag, and Draw object
+requests, the UI records only whether a block is required and a description;
+only the description is serialised.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="description" data-size="100">Description of the module or purpose requiring the error numbers.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Podule Object">
+<p>
+Requests a podule number, and optionally a manufacturer number.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="allocate_manf" data-size="4">Boolean flag. Non-zero means a manufacturer number is also required.</offset>
+ <offset number="4" name="manf" data-size="4">Existing manufacturer number when <userinput>allocate_manf</userinput> is zero; otherwise the field is not significant.</offset>
+ <offset number="8" name="podule_name" data-size="20">Podule name.</offset>
+ <offset number="28" name="description" data-size="100">Description of the podule.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Draw Tag Object">
+<p>
+Requests a Draw tagged-object block.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="description" data-size="100">Description of the use for the tagged object range.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Draw Object Object">
+<p>
+Requests a Draw object block.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="description" data-size="100">Description of the use for the Draw object range.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Filing System Object">
+<p>
+Requests a filing system number and its selector name.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="name" data-size="20">Filing system name, such as <userinput>SCSIFS</userinput>.</offset>
+ <offset number="20" name="select" data-size="20">Selection name used to choose the filing system, such as <userinput>SCSI</userinput>.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Service Block Object">
+<p>
+Requests a service call block.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="description" data-size="100">Description of the module or interface using the service calls.</offset>
+</offset-table>
+</p>
+</category>
+
+<category title="Device Object">
+<p>
+Requests a device number for the Device Claim protocol.
+</p>
+<p>
+<offset-table head-number="Offset" head-name="Field" head-data-size="Size" head-value="Contents">
+ <offset number="0" name="name" data-size="20">Device name.</offset>
+ <offset number="20" name="description" data-size="100">Description of the device or its use.</offset>
+</offset-table>
+</p>
+</category>
+</subsubsection>
+
+<subsubsection title="Version Handling">
+<p>
+The current source defines a single request-file version, written as
+<userinput>100</userinput> for version 1.00. The loader accepts any file whose
+version field is less than or equal to 100 and rejects newer versions.
+</p>
+<p>
+<version-table>
+ <version module-eq="1.00">Canonical format defined by the supplied sources and written by current Allocate binaries.</version>
+ <version module-lt="1.00">No distinct earlier on-disk request-file layout is defined in the supplied source tree. Older files, if any exist, are accepted only if they are binary-compatible with version 1.00.</version>
+ <version module-ge="1.01" state="unsupported">Rejected by the current loader as an unknown future format.</version>
+</version-table>
+</p>
+</subsubsection>
+
+<subsubsection title="Developer Details File">
+<p>
+Allocate also stores the requestor details separately. Current versions read
+from <filename type="riscos">Choices:Allocate.Details</filename> first and fall
+back to <filename type="riscos">Allocate:Details</filename>. When saving,
+current versions attempt to write
+<filename type="riscos">&lt;Choices$Write&gt;.Allocate.Details</filename> and
+fall back to <filename type="riscos">Allocate:Details</filename>.
+</p>
+<p>
+The standalone details file is simply the 452-byte
+<reference type="subsubsection" name="Developer Details Block"/> written on
+its own, with RISC OS filetype <userinput>&amp;FFD</userinput>.
+</p>
+<p>
+The bundled help records one behavioural change across application versions:
+older Allocate versions stored user details within the application directory,
+whereas later versions prefer the Choices location.
+</p>
+</subsubsection>
+
+<subsubsection title="Email Export Format">
+<p>
+The <userinput>Save for email</userinput> operation creates a plain text file
+of filetype <userinput>&amp;FFF</userinput>. The file starts with a human-readable
+summary of every request object, then appends a uuencoded attachment named
+<userinput>request</userinput> containing the full binary request file.
+</p>
+<p>
+Each summary block is generated from the in-memory object data. The binary
+attachment is produced by first writing a normal request file and then
+uuencoding that file in the traditional form:
+</p>
+<p>
+<extended-example type="format">
+begin 644 request
+...
+end
+</extended-example>
+</p>
+</subsubsection>
+
+<subsubsection title="Reserved-Names CSV Export">
+<p>
+The <userinput>Save reserved names</userinput> operation writes only
+reservation objects. The output file has filetype <userinput>&amp;DFE</userinput>
+and contains one comma-separated line per reservation:
+</p>
+<p>
+<definition-table head-name="Column" head-value="Contents">
+ <definition name="1">Developer name.</definition>
+ <definition name="2">Company name.</definition>
+ <definition name="3">Developer number.</definition>
+ <definition name="4">Telephone number.</definition>
+ <definition name="5">Fax number.</definition>
+ <definition name="6">Reserved name text.</definition>
+ <definition name="7">Reservation type.</definition>
+ <definition name="8">Current date formatted as <userinput>dd-Mon-yyyy</userinput> in UTC.</definition>
+</definition-table>
+</p>
+<p>
+The export routine does not quote commas within fields, so any commas present
+in the stored data will split columns in the resulting CSV.
+</p>
+</subsubsection>
+
+<subsubsection title="Reply Form Export">
+<p>
+The <userinput>Save reply form</userinput> operation writes a plain text
+template of filetype <userinput>&amp;FFF</userinput>. Objects are grouped by
+their type identifier order, from SWI chunks through devices. Section headings
+and per-object labels are taken from the application's messages file.
+</p>
+<p>
+The generated text is intended as a response template from the allocations
+service rather than as an interchange format. It contains no machine-readable
+version field.
+</p>
+</subsubsection>
+</subsection>
+</section>
+
+<section title="Examples">
+<subsection title="Minimal Request File Layout">
+<p>
+The following pseudocode shows the layout of a request file containing one
+reservation object:
+</p>
+<p>
+<extended-example type="pseudo">
+write 8 bytes "ALLOCATE"
+write int32 100
+write int32 1
+write DetailsInfo
+write int32 2                  ; Object_Reservation
+write int32 60                 ; sizeof(Reservation)
+write 40 bytes reservation text
+write 20 bytes reservation type
+</extended-example>
+</p>
+</subsection>
+</section>
+
+</chapter>
+
+<meta>
+ <maintainer>
+  <email name="Charles (Gerph)" address="gerph@gerph.org" />
+ </maintainer>
+ <disclaimer>
+  <p>
+   Copyright &copy; Charles (Gerph), 2026.
+  </p>
+ </disclaimer>
+ <history>
+  <revision number="1" author="Charles (Gerph)" date="29 Jun 2026" title="Initial version">
+   <change>Documented the Allocate binary request file, embedded object layouts, developer details storage, and the related email, CSV, and reply-form exports from the supplied sources and bundled help.</change>
+  </revision>
+ </history>
+</meta>
+</riscos-prm>

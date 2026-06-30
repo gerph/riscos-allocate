@@ -1,0 +1,304 @@
+<?xml version="1.0"?>
+<!DOCTYPE riscos-prm PUBLIC "-//Gerph//DTD PRM documentation 1.03//EN"
+                            "http://gerph.org/dtd/103/prm.dtd">
+<riscos-prm>
+<chapter title="riscos-allocate">
+<section title="Introduction and Overview">
+<p>
+<userinput>riscos-allocate</userinput> converts Allocate request files to
+and from a textual YAML description. The tool reads the native Allocate binary
+request format with filetype <userinput>&amp;FB0</userinput>, produces a
+human-readable UTF-8 description, and can recreate a binary request from that
+description.
+</p>
+<p>
+The textual format is intended for inspection, editing, and source control. It
+preserves the developer details, the ordered list of registrations, and the
+filetype attachments required by filetype requests. Attachments may either be
+embedded inline in the YAML document or detached into sibling files referenced
+from the YAML.
+</p>
+</section>
+
+<section title="Technical Details">
+<subsection title="Tool Behaviour">
+<p>
+Without conversion switches, the tool displays a human-readable summary of the
+binary Allocate request. With <userinput>--extract</userinput> it writes a YAML
+description, and with <userinput>--create</userinput> it reads the YAML
+description and writes a native Allocate request file.
+</p>
+<p>
+The tool emits warnings to the standard error stream when the YAML description
+is structurally malformed, contains unknown fields, omits expected fields, uses
+values of the wrong type, refers to missing detached files, or contains text
+that cannot be represented in Latin-1 without replacement.
+</p>
+</subsection>
+
+<subsection title="Input and Output Selection">
+<p>
+The positional <userinput>file</userinput> argument is interpreted according to
+the selected operation:
+ <list type="unordered">
+  <item><p>For display and extraction it names a native Allocate request file.</p></item>
+  <item><p>For creation it may name either a YAML file or a directory containing <filename type="unix">Allocation.yaml</filename>.</p></item>
+ </list>
+</p>
+<p>
+When extracting to a detached directory with
+<userinput>--extract-files</userinput>, the tool writes
+<filename type="unix">Allocation.yaml</filename> and any detached attachment
+files into the named directory. When creating from a detached description, the
+tool resolves those attachment filenames relative to the YAML file or the
+directory containing it.
+</p>
+</subsection>
+
+<subsection title="Text Encoding">
+<p>
+Developer-detail fields and fixed text fields in the binary Allocate format are
+stored as fixed-width Latin-1 byte arrays. Text attachments within filetype
+registrations are also treated as Latin-1. The YAML description is written as
+UTF-8, so binary Latin-1 text is decoded to Unicode when extracting and is
+encoded back to Latin-1 when creating a request file.
+</p>
+<p>
+If a YAML value contains characters outside Latin-1, the tool warns and
+replaces each unrepresentable character with
+<userinput>?</userinput> during creation.
+</p>
+</subsection>
+
+<subsection title="Top-Level YAML Structure">
+<p>
+The YAML document is a mapping with the following top-level keys:
+</p>
+<p>
+<definition-table head-name="Key" head-value="Meaning">
+ <definition name="SchemaVersion">Version of the YAML description schema. The current tool writes <userinput>1</userinput>.</definition>
+ <definition name="FormatVersion">Allocate request-file version. The current Allocate file format uses <userinput>1.00</userinput>, corresponding to binary value <userinput>100</userinput>.</definition>
+ <definition name="Developer">Mapping containing the requestor details.</definition>
+ <definition name="Registrations">Sequence of registration objects in the same order as the binary request file.</definition>
+</definition-table>
+</p>
+<p>
+Empty optional scalar fields are written as YAML <userinput>null</userinput>.
+</p>
+</subsection>
+
+<subsection title="Developer Mapping">
+<p>
+The <userinput>Developer</userinput> mapping contains these keys:
+</p>
+<p>
+<definition-table head-name="Key" head-value="Contents">
+ <definition name="Name">Requestor name.</definition>
+ <definition name="Company">Company or organisation name.</definition>
+ <definition name="DeveloperNumber">Developer number, if any.</definition>
+ <definition name="Address1">First address line.</definition>
+ <definition name="Address2">Second address line.</definition>
+ <definition name="Address3">Third address line.</definition>
+ <definition name="Address4">Fourth address line.</definition>
+ <definition name="Phone">Telephone number.</definition>
+ <definition name="Fax">Fax number.</definition>
+ <definition name="Email">Email address.</definition>
+</definition-table>
+</p>
+</subsection>
+
+<subsection title="Registration Sequence">
+<p>
+Each entry in <userinput>Registrations</userinput> is a mapping containing
+exactly one registration type name and its field mapping. The type names
+written by the tool are:
+</p>
+<p>
+<definition-table head-name="Type" head-value="Fields">
+ <definition name="SWIchunk">Prefix, Description.</definition>
+ <definition name="Messageblock">Description.</definition>
+ <definition name="Reservation">Type, Text.</definition>
+ <definition name="Filetype">ApplicationName, Name, DoubleClicking, and attachment fields.</definition>
+ <definition name="Errorblock">Description.</definition>
+ <definition name="Podule">AllocateManufacturer, ManufacturerId, PoduleName, Description.</definition>
+ <definition name="Drawtagblock">Description.</definition>
+ <definition name="Drawobjectblock">Description.</definition>
+ <definition name="Filingsystem">Name, Selector.</definition>
+ <definition name="Serviceblock">Description.</definition>
+ <definition name="Device">Name, Description.</definition>
+</definition-table>
+</p>
+<p>
+For compatibility, the creator also accepts space-separated and title-cased
+variants of these names, such as <userinput>SWIChunk</userinput> and
+<userinput>SWI chunk</userinput>.
+</p>
+</subsection>
+
+<subsection title="Filetype Attachments">
+<p>
+Filetype registrations carry three attachments: a sprite file, a product
+description, and a format description. In inline YAML output:
+ <list type="unordered">
+  <item><p><userinput>Sprite</userinput> contains the sprite data encoded as base64 text.</p></item>
+  <item><p><userinput>ProductDescription</userinput> contains the product description as decoded text.</p></item>
+  <item><p><userinput>FormatDescription</userinput> contains the format description as decoded text.</p></item>
+ </list>
+</p>
+<p>
+When <userinput>--extract-files</userinput> is used, these inline fields are
+replaced by filename references:
+</p>
+<p>
+<definition-table head-name="Key" head-value="Referenced file">
+ <definition name="SpriteFile">Sprite attachment, normally written with host suffix <userinput>,ff9</userinput>.</definition>
+ <definition name="ProductDescriptionFile">Product description attachment, written as a text file.</definition>
+ <definition name="FormatDescriptionFile">Format description attachment, written as a text file.</definition>
+</definition-table>
+</p>
+<p>
+If both an inline field and the corresponding detached-file field are present
+when creating a request, the detached file takes precedence and a warning is
+emitted.
+</p>
+</subsection>
+</section>
+
+<section title="Commands">
+<command-definition name="riscos-allocate"
+                    description="Display, extract, or create Allocate request files">
+ <syntax>
+  <optional>
+   <alternates>
+    <switch name="extract"/>
+    <switch name="create"/>
+   </alternates>
+  </optional>
+  <optional>
+   <switch name="extract-files"/>
+   <userreplace>directory</userreplace>
+  </optional>
+  <optional>
+   <switch name="o"/>
+   <userreplace>output</userreplace>
+  </optional>
+  <userreplace>file</userreplace>
+ </syntax>
+ <parameter name="extract" switch="extract">
+  Write the YAML description to standard output or to the file named by
+  <userinput>-o</userinput>.
+ </parameter>
+ <parameter name="create" switch="create">
+  Read a YAML description from <userinput>file</userinput> and create a binary
+  Allocate request. The input may be either a YAML file or a directory
+  containing <filename type="unix">Allocation.yaml</filename>.
+ </parameter>
+ <parameter name="extract-files" switch="extract-files" label="directory">
+  Write a detached YAML export into the named directory. The directory receives
+  <filename type="unix">Allocation.yaml</filename> and any detached attachment
+  files.
+ </parameter>
+ <parameter name="output" switch="o" switch-alias="output">
+  Write extracted YAML or created binary output to the named file instead of
+  standard output.
+ </parameter>
+ <parameter name="file">
+  Input file or directory, interpreted according to the selected mode.
+ </parameter>
+ <use>
+  <p>
+  <userinput>--extract</userinput> and <userinput>--create</userinput> are
+  mutually exclusive. <userinput>--extract-files</userinput> implies
+  <userinput>--extract</userinput> and cannot be combined with
+  <userinput>-o</userinput>.
+  </p>
+  <p>
+  In create mode, binary output is written to standard output when
+  <userinput>-o</userinput> is omitted. In extract mode, YAML is written to
+  standard output when <userinput>-o</userinput> is omitted.
+  </p>
+ </use>
+ <example>
+  <command>riscos-allocate request,fb0</command>
+  <br/>
+  <command>riscos-allocate --extract request,fb0</command>
+  <br/>
+  <command>riscos-allocate --extract-files outdir request,fb0</command>
+  <br/>
+  <command>riscos-allocate --create outdir -o rebuilt,fb0</command>
+ </example>
+ </command-definition>
+</section>
+
+<section title="Examples">
+<subsection title="Inline YAML Export">
+<p>
+The following abbreviated example shows the structure of an inline YAML
+description:
+</p>
+<p>
+<extended-example type="format">
+SchemaVersion: 1
+FormatVersion: 1.00
+Developer:
+  Name: Justin Fletcher
+  Company: Gerph
+  Email: gerph@gerph.org
+Registrations:
+  - Filetype:
+      ApplicationName: null
+      Name: Zip
+      DoubleClicking: true
+      Sprite: |
+        U1BSSVRFRklMRQ==
+      ProductDescription: |
+        Product line 1
+        Product line 2
+  - Reservation:
+      Type: ModName
+      Text: WebColours
+</extended-example>
+</p>
+</subsection>
+
+<subsection title="Detached YAML Export">
+<p>
+When attachments are detached, the YAML refers to sibling files instead of
+embedding their content:
+</p>
+<p>
+<extended-example type="format">
+SchemaVersion: 1
+FormatVersion: 1.00
+Developer:
+  Name: Justin Fletcher
+Registrations:
+  - Filetype:
+      ApplicationName: null
+      Name: Zip
+      DoubleClicking: true
+      SpriteFile: 1-Filetype-Sprite,ff9
+      ProductDescriptionFile: 1-Filetype-ProductDescription.txt
+      FormatDescriptionFile: 1-Filetype-FormatDescription.txt
+</extended-example>
+</p>
+</subsection>
+</section>
+</chapter>
+
+<meta>
+ <maintainer>
+  <email name="Charles (Gerph)" address="gerph@gerph.org" />
+ </maintainer>
+ <disclaimer>
+  <p>
+   Copyright &copy; Charles (Gerph), 2026.
+  </p>
+ </disclaimer>
+ <history>
+  <revision number="1" author="Charles (Gerph)" date="30 Jun 2026" title="Initial version">
+   <change>Documented the riscos-allocate conversion tool, its command-line interface, and the YAML description format used to extract and recreate Allocate request files.</change>
+  </revision>
+ </history>
+</meta>
+</riscos-prm>
