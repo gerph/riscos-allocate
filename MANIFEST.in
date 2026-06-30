@@ -1,0 +1,4 @@
+include LICENSE
+include Makefile
+include riscos-allocate.py
+recursive-include prminxml *.xml
