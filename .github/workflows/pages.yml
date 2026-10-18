@@ -27,38 +27,34 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build PRM-in-XML documentation in RISC OS 3 PRM style
+      # PrinceXML (http://www.princexml.com/) requires a licence. The non-commercial
+      # licence may be used for documents that carry no advertising, are free to
+      # everyone, and are published on a free site without advertising, provided
+      # that a link to the PrinceXML site is given (the landing page has one).
+      # See https://www.princexml.com/purchase/license_faq/ for details.
+      - name: Build PRM-in-XML documentation and PDFs in RISC OS 3 PRM style
         uses: gerph/riscos-prminxml-action@v1
         with:
           files: prminxml/riscos-allocate.xml prminxml/allocateformat.xml
           output: site
           style: prm
           css-variant: large-bullets
+          pdf-generator: prince
 
-      - name: Add landing page
+      - name: Build the landing page
+        uses: gerph/riscos-prminxml-action@v1
+        with:
+          files: prminxml/landing.xml
+          output: site
+          style: prm
+          css-variant: large-bullets
+
+      - name: Assemble the site
         run: |
-          cat > site/index.html <<'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>riscos-allocate documentation</title>
-          <style>
-          body { font-family: serif; max-width: 40em; margin: 2em auto; padding: 0 1em; line-height: 1.5; }
-          h1 { font-family: sans-serif; }
-          li { margin-bottom: 0.5em; }
-          </style>
-          </head>
-          <body>
-          <h1>riscos-allocate documentation</h1>
-          <ul>
-          <li><a href="riscos-allocate.html">riscos-allocate</a>: the command line tool for displaying, extracting and creating Allocate request files.</li>
-          <li><a href="allocateformat.html">Allocate request file format</a>: the layout of the binary request files.</li>
-          </ul>
-          </body>
-          </html>
-          EOF
+          mv site/landing.html site/index.html
+          rm -f site/landing.xml
+          # References to other files get '.html' appended, which is wrong for the PDFs.
+          sed -i -E 's/\.pdf\.html#link_pdf/.pdf/g' site/index.html
 
       - uses: actions/upload-artifact@v7
         with:
