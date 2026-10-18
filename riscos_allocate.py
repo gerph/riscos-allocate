@@ -32,6 +32,20 @@ DEVELOPER_FIELDS = [
     ("Email", "email", 50),
 ]
 
+# The 'allocate request type' vocabulary for Reservations, from the RISC OS Open allocation page.
+RESERVATION_TYPES = {
+    "AppName",
+    "DeviceFS",
+    "EnvVar",
+    "FontName",
+    "ModName",
+    "ResourceFS",
+    "ScrapDir",
+    "StarComm",
+    "Transient",
+    "WimpSprite",
+}
+
 OBJECT_NAME_TO_ID = {
     "SWIChunk": 0,
     "MessageBlock": 1,
@@ -1034,6 +1048,13 @@ def serialise_registration(
         expected = {"Type", "Text"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
+        if "Type" in values and values["Type"] not in RESERVATION_TYPES:
+            warn(
+                warnings,
+                "{}.Type {!r} is not a known reservation type ({})".format(
+                    context, values["Type"], ", ".join(sorted(RESERVATION_TYPES))
+                ),
+            )
         payload = (
             encode_text_field(values.get("Text"), 40, "{}.Text".format(context), warnings)
             + encode_text_field(values.get("Type"), 20, "{}.Type".format(context), warnings)
