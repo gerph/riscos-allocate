@@ -1,12 +1,15 @@
 # riscos-allocate
 
+[![Documentation](https://img.shields.io/badge/Generated-Documentation-yellow)](https://gerph.github.io/riscos-allocate/)
+
 `riscos-allocate` is a command line tool for working with RISC OS Allocate
 request files. It reads the native binary request format, displays a readable
 summary, extracts a YAML representation for editing and source control, and can
 recreate a binary request from that YAML description.
 
 The repository also contains PRM-in-XML documentation for both the tool and
-the Allocate file format in [`prminxml/`](prminxml/).
+the Allocate file format in [`prminxml/`](prminxml/), which is published at
+<https://gerph.github.io/riscos-allocate/>.
 
 ## Features
 
@@ -91,4 +94,6 @@ Generated files are written to:
 - [`prminxml/`](prminxml/) contains the source documentation.
 - [`.github/workflows/build.yml`](.github/workflows/build.yml) builds the
   release artifacts in CI.
+- [`.github/workflows/pages.yml`](.github/workflows/pages.yml) publishes the
+  documentation to GitHub Pages.
 

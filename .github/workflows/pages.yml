@@ -1,0 +1,81 @@
+---
+# Publish the PRM-in-XML documentation to GitHub Pages in the RISC OS 3 PRM style.
+# Pages must be enabled with the source set to 'GitHub Actions'.
+
+name: Documentation
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches: ["*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build PRM-in-XML documentation in RISC OS 3 PRM style
+        uses: gerph/riscos-prminxml-action@v1
+        with:
+          files: prminxml/riscos-allocate.xml prminxml/allocateformat.xml
+          output: site
+          style: prm
+          css-variant: large-bullets
+
+      - name: Add landing page
+        run: |
+          cat > site/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>riscos-allocate documentation</title>
+          <style>
+          body { font-family: serif; max-width: 40em; margin: 2em auto; padding: 0 1em; line-height: 1.5; }
+          h1 { font-family: sans-serif; }
+          li { margin-bottom: 0.5em; }
+          </style>
+          </head>
+          <body>
+          <h1>riscos-allocate documentation</h1>
+          <ul>
+          <li><a href="riscos-allocate.html">riscos-allocate</a>: the command line tool for displaying, extracting and creating Allocate request files.</li>
+          <li><a href="allocateformat.html">Allocate request file format</a>: the layout of the binary request files.</li>
+          </ul>
+          </body>
+          </html>
+          EOF
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Documentation
+          path: site
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  publish:
+    needs: build-docs
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
