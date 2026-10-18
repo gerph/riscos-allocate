@@ -641,6 +641,11 @@ def parse_yaml_scalar_text(value: str) -> object:
         return False
     if re.fullmatch(r"-?\d+", value):
         return int(value)
+    # Only empty flow collections are supported.
+    if re.fullmatch(r"\[\s*\]", value):
+        return []
+    if re.fullmatch(r"\{\s*\}", value):
+        return {}
     if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
         return decode_yaml_double_quoted(value[1:-1])
     return value
@@ -792,14 +797,13 @@ class SimpleYamlParser:
 
         index = self.next_significant(index)
         if index >= self.line_count:
-            warn(warnings, "Expected nested content at end of file")
-            return {}, index
+            # A key with no value is a YAML null.
+            return None, index
 
         line = self.lines[index]
         indent = count_indent(line)
         if indent <= parent_indent:
-            warn(warnings, "Expected nested content at line {}".format(index + 1))
-            return {}, index
+            return None, index
 
         if line[indent:].startswith("- "):
             return self.parse_sequence(index, indent, warnings)
@@ -1248,7 +1252,9 @@ def build_allocate_binary(source: Path) -> tuple[bytes, list[str]]:
 
     registrations = data.get("Registrations")
     if registrations is None:
-        warn(warnings, "Registrations missing; creating an empty request")
+        # A bare 'Registrations:' is an explicitly empty request; only an omitted key warns.
+        if "Registrations" not in data:
+            warn(warnings, "Registrations missing; creating an empty request")
         registrations = []
     elif not isinstance(registrations, list):
         warn(warnings, "Registrations should be a sequence; creating an empty request")
