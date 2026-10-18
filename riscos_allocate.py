@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Display the contents of Allocate request files."""
+"""
+Display the contents of Allocate request files.
+"""
 
 from __future__ import annotations
 
@@ -74,12 +76,16 @@ OBJECT_ALIASES = {
 
 
 class ParseError(Exception):
-    """Raised when an Allocate file cannot be parsed."""
+    """
+    Raised when an Allocate file cannot be parsed.
+    """
 
 
 @dataclass
 class AttachmentInfo:
-    """Information about an embedded binary attachment."""
+    """
+    Information about an embedded binary attachment.
+    """
 
     kind: str
     size: int
@@ -87,40 +93,50 @@ class AttachmentInfo:
 
 
 def decode_text(data: bytes) -> str:
-    """Decode a fixed-length Allocate text field."""
+    """
+    Decode a fixed-length Allocate text field.
+    """
 
     return data.split(b"\0", 1)[0].decode("latin-1", errors="replace").strip()
 
 
 def read_exact(stream: BinaryIO, size: int, context: str) -> bytes:
-    """Read exactly size bytes or raise a parse error."""
+    """
+    Read exactly size bytes or raise a parse error.
+    """
 
     data = stream.read(size)
     if len(data) != size:
-        raise ParseError(f"Unexpected end of file while reading {context}")
+        raise ParseError("Unexpected end of file while reading {}".format(context))
     return data
 
 
 def read_i32(buffer: bytes, offset: int, context: str) -> tuple[int, int]:
-    """Read a little-endian 32-bit integer from a buffer."""
+    """
+    Read a little-endian 32-bit integer from a buffer.
+    """
 
     end = offset + 4
     if end > len(buffer):
-        raise ParseError(f"Object payload too short while reading {context}")
+        raise ParseError("Object payload too short while reading {}".format(context))
     return struct.unpack_from("<i", buffer, offset)[0], end
 
 
 def format_version(version: int) -> str:
-    """Format an integer version field as decimal.major."""
+    """
+    Format an integer version field as decimal.major.
+    """
 
-    return f"{version // 100}.{version % 100:02d}"
+    return "{}.{:02d}".format(version // 100, version % 100)
 
 
 def parse_details_block(data: bytes) -> dict[str, str]:
-    """Parse the 452-byte developer details block."""
+    """
+    Parse the 452-byte developer details block.
+    """
 
     if len(data) != 452:
-        raise ParseError(f"Developer details block has unexpected size {len(data)}")
+        raise ParseError("Developer details block has unexpected size {}".format(len(data)))
 
     layout = [
         ("name", 40),
@@ -144,7 +160,9 @@ def parse_details_block(data: bytes) -> dict[str, str]:
 
 
 def parse_filetype_payload(payload: bytes) -> dict[str, object]:
-    """Parse the variable-length filetype object payload."""
+    """
+    Parse the variable-length filetype object payload.
+    """
 
     minimum = 12 + 9 + 4
     if len(payload) < minimum:
@@ -164,18 +182,18 @@ def parse_filetype_payload(payload: bytes) -> dict[str, object]:
             offset = size_offset
             attachments: list[AttachmentInfo] = []
             for label in ("sprite", "product description", "format description"):
-                size, offset = read_i32(payload, offset, f"{label} size")
+                size, offset = read_i32(payload, offset, "{} size".format(label))
                 if size < 0:
-                    raise ParseError(f"{label} attachment has negative size {size}")
+                    raise ParseError("{} attachment has negative size {}".format(label, size))
                 end = offset + size
                 if end > len(payload):
-                    raise ParseError(f"{label} attachment overruns the object payload")
+                    raise ParseError("{} attachment overruns the object payload".format(label))
                 attachments.append(AttachmentInfo(label, size, payload[offset:end]))
                 offset = end
 
             if offset != len(payload):
                 raise ParseError(
-                    f"Filetype object has {len(payload) - offset} trailing byte(s)"
+                    "Filetype object has {} trailing byte(s)".format(len(payload) - offset)
                 )
 
             return {
@@ -191,7 +209,9 @@ def parse_filetype_payload(payload: bytes) -> dict[str, object]:
 
 
 def parse_object_payload(object_id: int, payload: bytes) -> tuple[str, dict[str, object]]:
-    """Parse an object payload based on its object identifier."""
+    """
+    Parse an object payload based on its object identifier.
+    """
 
     if object_id == 0:
         return "SWI chunk", {
@@ -237,25 +257,29 @@ def parse_object_payload(object_id: int, payload: bytes) -> tuple[str, dict[str,
             "description": decode_text(payload[20:120]),
         }
 
-    return f"Unknown object ({object_id})", {"raw_payload_size": len(payload)}
+    return "Unknown object ({})".format(object_id), {"raw_payload_size": len(payload)}
 
 
 def require_size(payload: bytes, size: int, name: str) -> None:
-    """Validate that a fixed-size payload is large enough."""
+    """
+    Validate that a fixed-size payload is large enough.
+    """
 
     if len(payload) < size:
-        raise ParseError(f"{name} payload is too short: expected {size}, got {len(payload)}")
+        raise ParseError("{} payload is too short: expected {}, got {}".format(name, size, len(payload)))
 
 
 def parse_object(index: int, stream: BinaryIO) -> dict[str, object]:
-    """Parse a single object record."""
+    """
+    Parse a single object record.
+    """
 
-    header = read_exact(stream, OBJECT_HEADER_STRUCT.size, f"object {index} header")
+    header = read_exact(stream, OBJECT_HEADER_STRUCT.size, "object {} header".format(index))
     object_id, size = OBJECT_HEADER_STRUCT.unpack(header)
     if size < 0:
-        raise ParseError(f"Object {index} has negative size {size}")
+        raise ParseError("Object {} has negative size {}".format(index, size))
 
-    payload = read_exact(stream, size, f"object {index} payload")
+    payload = read_exact(stream, size, "object {} payload".format(index))
 
     fixed_sizes = {
         0: 120,
@@ -270,7 +294,7 @@ def parse_object(index: int, stream: BinaryIO) -> dict[str, object]:
         10: 120,
     }
     if object_id in fixed_sizes:
-        require_size(payload, fixed_sizes[object_id], f"object {index}")
+        require_size(payload, fixed_sizes[object_id], "object {}".format(index))
 
     name, values = parse_object_payload(object_id, payload)
     return {
@@ -283,7 +307,9 @@ def parse_object(index: int, stream: BinaryIO) -> dict[str, object]:
 
 
 def parse_allocate_file(path: Path) -> dict[str, object]:
-    """Parse an Allocate request file."""
+    """
+    Parse an Allocate request file.
+    """
 
     with path.open("rb") as stream:
         header = read_exact(stream, HEADER_STRUCT.size, "file header")
@@ -291,10 +317,10 @@ def parse_allocate_file(path: Path) -> dict[str, object]:
 
         if magic != MAGIC:
             raise ParseError(
-                f"Bad file header: expected {MAGIC!r}, found {magic!r}"
+                "Bad file header: expected {!r}, found {!r}".format(MAGIC, magic)
             )
         if object_count < 0:
-            raise ParseError(f"Negative object count {object_count}")
+            raise ParseError("Negative object count {}".format(object_count))
 
         details = parse_details_block(read_exact(stream, 452, "developer details"))
         objects = [
@@ -313,19 +339,25 @@ def parse_allocate_file(path: Path) -> dict[str, object]:
 
 
 def print_key_value(label: str, value: object, indent: str = "") -> None:
-    """Print a formatted key/value pair."""
+    """
+    Print a formatted key/value pair.
+    """
 
-    print(f"{indent}{label}: {value}")
+    print("{}{}: {}".format(indent, label, value))
 
 
 def decode_latin1_text(data: bytes) -> str:
-    """Decode attachment text fields as Latin-1."""
+    """
+    Decode attachment text fields as Latin-1.
+    """
 
     return data.decode("latin-1", errors="replace")
 
 
 def yaml_quote(value: str) -> str:
-    """Quote a scalar for YAML output."""
+    """
+    Quote a scalar for YAML output.
+    """
 
     escaped = (
         value.replace("\\", "\\\\")
@@ -334,11 +366,13 @@ def yaml_quote(value: str) -> str:
         .replace("\r", "\\r")
         .replace("\t", "\\t")
     )
-    return f'"{escaped}"'
+    return '"{}"'.format(escaped)
 
 
 def yaml_safe_key(name: str) -> str:
-    """Return a YAML-safe key token."""
+    """
+    Return a YAML-safe key token.
+    """
 
     if all(ch.isalnum() or ch in "_-" for ch in name):
         return name
@@ -346,7 +380,9 @@ def yaml_safe_key(name: str) -> str:
 
 
 def yaml_scalar(value: object) -> str:
-    """Format a simple scalar value for YAML output."""
+    """
+    Format a simple scalar value for YAML output.
+    """
 
     if value is None:
         return "null"
@@ -369,33 +405,41 @@ def yaml_scalar(value: object) -> str:
 
 
 def emit_yaml_block(lines: list[str], key: str, value: str, indent: int) -> None:
-    """Emit a literal block scalar."""
+    """
+    Emit a literal block scalar.
+    """
 
     prefix = " " * indent
-    lines.append(f"{prefix}{key}: |")
+    lines.append("{}{}: |".format(prefix, key))
     for line in value.splitlines():
-        lines.append(f"{prefix}  {line}")
+        lines.append("{}  {}".format(prefix, line))
     if value.endswith("\n"):
-        lines.append(f"{prefix}  ")
+        lines.append("{}  ".format(prefix))
 
 
 def attachment_filename(index: int, object_name: str, field_name: str, suffix: str) -> str:
-    """Generate a deterministic detached filename for an attachment."""
+    """
+    Generate a deterministic detached filename for an attachment.
+    """
 
     safe_object = object_name.replace(" ", "")
-    return f"{index}-{safe_object}-{field_name}{suffix}"
+    return "{}-{}-{}{}".format(index, safe_object, field_name, suffix)
 
 
 def registration_yaml_name(object_name: str) -> str:
-    """Return the exported YAML object type name."""
+    """
+    Return the exported YAML object type name.
+    """
 
     return object_name.replace(" ", "")
 
 
 def developer_to_yaml(details: dict[str, str], version: int) -> list[str]:
-    """Convert the developer details block to YAML lines."""
+    """
+    Convert the developer details block to YAML lines.
+    """
 
-    lines = ["SchemaVersion: 1", f"FormatVersion: {yaml_scalar(format_version(version))}", "Developer:"]
+    lines = ["SchemaVersion: 1", "FormatVersion: {}".format(yaml_scalar(format_version(version))), "Developer:"]
     labels = [
         ("Name", "name"),
         ("Company", "company"),
@@ -410,7 +454,7 @@ def developer_to_yaml(details: dict[str, str], version: int) -> list[str]:
     ]
     for label, key in labels:
         value = details[key] or None
-        lines.append(f"  {label}: {yaml_scalar(value)}")
+        lines.append("  {}: {}".format(label, yaml_scalar(value)))
     return lines
 
 
@@ -419,7 +463,9 @@ def filetype_yaml_fields(
     values: dict[str, object],
     extract_dir: Path | None,
 ) -> tuple[list[tuple[str, object, bool]], list[tuple[str, bytes]]]:
-    """Build YAML fields and detached files for a filetype object."""
+    """
+    Build YAML fields and detached files for a filetype object.
+    """
 
     fields: list[tuple[str, object, bool]] = [
         ("ApplicationName", values["application_name"] or None, False),
@@ -454,7 +500,9 @@ def object_to_yaml(
     obj: dict[str, object],
     extract_dir: Path | None,
 ) -> tuple[list[str], list[tuple[str, bytes]]]:
-    """Convert one object to YAML lines and detached files."""
+    """
+    Convert one object to YAML lines and detached files.
+    """
 
     fields: list[tuple[str, object, bool]]
     files_to_write: list[tuple[str, bytes]] = []
@@ -490,17 +538,19 @@ def object_to_yaml(
     else:
         fields = [("RawPayloadSize", values["raw_payload_size"], False)]
 
-    lines = [f"  - {registration_yaml_name(obj['name'])}:"]
+    lines = ["  - {}:".format(registration_yaml_name(obj['name']))]
     for key, value, literal in fields:
         if literal and isinstance(value, str):
             emit_yaml_block(lines, key, value, 6)
         else:
-            lines.append(f"      {yaml_safe_key(key)}: {yaml_scalar(value)}")
+            lines.append("      {}: {}".format(yaml_safe_key(key), yaml_scalar(value)))
     return lines, files_to_write
 
 
 def build_yaml(parsed: dict[str, object], extract_dir: Path | None = None) -> tuple[str, list[tuple[str, bytes]]]:
-    """Build the extracted YAML description and detached file list."""
+    """
+    Build the extracted YAML description and detached file list.
+    """
 
     lines = developer_to_yaml(parsed["details"], parsed["version"])
     lines.append("Registrations:")
@@ -516,29 +566,37 @@ def build_yaml(parsed: dict[str, object], extract_dir: Path | None = None) -> tu
 
 
 def write_extract_files(parsed: dict[str, object], output_dir: Path) -> None:
-    """Write the YAML export and detached files to a directory."""
+    """
+    Write the YAML export and detached files to a directory.
+    """
 
     output_dir.mkdir(parents=True, exist_ok=True)
     yaml_text, files_to_write = build_yaml(parsed, extract_dir=output_dir)
-    (output_dir / "Allocation.yaml").write_text(yaml_text, encoding="utf-8")
+    output_dir.joinpath("Allocation.yaml").write_text(yaml_text, encoding="utf-8")
     for filename, data in files_to_write:
-        (output_dir / filename).write_bytes(data)
+        output_dir.joinpath(filename).write_bytes(data)
 
 
 def warn(warnings: list[str], message: str) -> None:
-    """Record a warning."""
+    """
+    Record a warning.
+    """
 
     warnings.append(message)
 
 
 def count_indent(line: str) -> int:
-    """Count leading spaces in a YAML line."""
+    """
+    Count leading spaces in a YAML line.
+    """
 
     return len(line) - len(line.lstrip(" "))
 
 
 def decode_yaml_double_quoted(value: str) -> str:
-    """Decode a limited YAML double-quoted scalar."""
+    """
+    Decode a limited YAML double-quoted scalar.
+    """
 
     chars: list[str] = []
     i = 0
@@ -570,7 +628,9 @@ def decode_yaml_double_quoted(value: str) -> str:
 
 
 def parse_yaml_scalar_text(value: str) -> object:
-    """Parse the subset of YAML scalars emitted by this tool."""
+    """
+    Parse the subset of YAML scalars emitted by this tool.
+    """
 
     value = value.strip()
     if value == "null":
@@ -587,39 +647,49 @@ def parse_yaml_scalar_text(value: str) -> object:
 
 
 class SimpleYamlParser:
-    """Parse the limited YAML subset used by allocate_dump."""
+    """
+    Parse the limited YAML subset used by allocate_dump.
+    """
 
     def __init__(self, text: str):
         self.lines = text.splitlines()
         self.line_count = len(self.lines)
 
     def is_blank(self, index: int) -> bool:
-        """Return whether the line is empty or a comment."""
+        """
+        Return whether the line is empty or a comment.
+        """
 
         stripped = self.lines[index].strip()
         return stripped == "" or stripped.startswith("#")
 
     def next_significant(self, index: int) -> int:
-        """Skip blank lines and comments."""
+        """
+        Skip blank lines and comments.
+        """
 
         while index < self.line_count and self.is_blank(index):
             index += 1
         return index
 
     def parse(self) -> tuple[dict[str, object], list[str]]:
-        """Parse a full document."""
+        """
+        Parse a full document.
+        """
 
         warnings: list[str] = []
         mapping, index = self.parse_mapping(0, 0, warnings)
         index = self.next_significant(index)
         if index < self.line_count:
-            warn(warnings, f"Unexpected trailing content at line {index + 1}")
+            warn(warnings, "Unexpected trailing content at line {}".format(index + 1))
         return mapping, warnings
 
     def parse_mapping(
         self, index: int, indent: int, warnings: list[str]
     ) -> tuple[dict[str, object], int]:
-        """Parse a mapping block."""
+        """
+        Parse a mapping block.
+        """
 
         result: dict[str, object] = {}
         while True:
@@ -634,7 +704,7 @@ class SimpleYamlParser:
             if current_indent > indent:
                 warn(
                     warnings,
-                    f"Unexpected indentation at line {index + 1}; treating as nested content",
+                    "Unexpected indentation at line {}; treating as nested content".format(index + 1),
                 )
                 return result, index
 
@@ -644,14 +714,14 @@ class SimpleYamlParser:
 
             match = re.match(r"([^:]+):(.*)$", stripped)
             if not match:
-                warn(warnings, f"Malformed mapping entry at line {index + 1}")
+                warn(warnings, "Malformed mapping entry at line {}".format(index + 1))
                 index += 1
                 continue
 
             key = match.group(1).strip()
             remainder = match.group(2).lstrip()
             if key in result:
-                warn(warnings, f"Duplicate key {key!r} at line {index + 1}; overwriting")
+                warn(warnings, "Duplicate key {!r} at line {}; overwriting".format(key, index + 1))
 
             if remainder == "|":
                 value, index = self.parse_block_scalar(index + 1, indent, warnings)
@@ -666,7 +736,9 @@ class SimpleYamlParser:
     def parse_sequence(
         self, index: int, indent: int, warnings: list[str]
     ) -> tuple[list[object], int]:
-        """Parse a sequence block."""
+        """
+        Parse a sequence block.
+        """
 
         result: list[object] = []
         while True:
@@ -679,7 +751,7 @@ class SimpleYamlParser:
             if current_indent < indent:
                 return result, index
             if current_indent != indent:
-                warn(warnings, f"Unexpected sequence indentation at line {index + 1}")
+                warn(warnings, "Unexpected sequence indentation at line {}".format(index + 1))
                 return result, index
 
             stripped = line[current_indent:]
@@ -714,7 +786,9 @@ class SimpleYamlParser:
     def parse_nested_value(
         self, index: int, parent_indent: int, warnings: list[str]
     ) -> tuple[object, int]:
-        """Parse the value nested under a mapping key or sequence item."""
+        """
+        Parse the value nested under a mapping key or sequence item.
+        """
 
         index = self.next_significant(index)
         if index >= self.line_count:
@@ -724,7 +798,7 @@ class SimpleYamlParser:
         line = self.lines[index]
         indent = count_indent(line)
         if indent <= parent_indent:
-            warn(warnings, f"Expected nested content at line {index + 1}")
+            warn(warnings, "Expected nested content at line {}".format(index + 1))
             return {}, index
 
         if line[indent:].startswith("- "):
@@ -734,7 +808,9 @@ class SimpleYamlParser:
     def parse_block_scalar(
         self, index: int, parent_indent: int, warnings: list[str]
     ) -> tuple[str, int]:
-        """Parse a literal block scalar."""
+        """
+        Parse a literal block scalar.
+        """
 
         index = self.next_significant(index)
         if index >= self.line_count:
@@ -744,7 +820,7 @@ class SimpleYamlParser:
         required_indent = parent_indent + 2
         first_indent = count_indent(self.lines[index])
         if first_indent < required_indent:
-            warn(warnings, f"Expected block scalar content at line {index + 1}")
+            warn(warnings, "Expected block scalar content at line {}".format(index + 1))
             return "", index
 
         lines: list[str] = []
@@ -770,58 +846,66 @@ class SimpleYamlParser:
 def encode_text_field(
     value: object, size: int, context: str, warnings: list[str]
 ) -> bytes:
-    """Encode a fixed-width Latin-1 text field."""
+    """
+    Encode a fixed-width Latin-1 text field.
+    """
 
     if value is None:
         text = ""
     elif isinstance(value, str):
         text = value
     else:
-        warn(warnings, f"{context} should be text; converting from {type(value).__name__}")
+        warn(warnings, "{} should be text; converting from {}".format(context, type(value).__name__))
         text = str(value)
 
     encoded = text.encode("latin-1", errors="replace")
     if encoded.decode("latin-1") != text:
-        warn(warnings, f"{context} contains characters outside Latin-1; replaced with '?'")
+        warn(warnings, "{} contains characters outside Latin-1; replaced with '?'".format(context))
     if len(encoded) > size:
-        warn(warnings, f"{context} exceeds {size} bytes; truncating")
+        warn(warnings, "{} exceeds {} bytes; truncating".format(context, size))
     return encoded[:size].ljust(size, b"\0")
 
 
 def encode_attachment_text(value: object, context: str, warnings: list[str]) -> bytes:
-    """Encode a Latin-1 attachment."""
+    """
+    Encode a Latin-1 attachment.
+    """
 
     if value is None:
-        warn(warnings, f"{context} missing; using empty content")
+        warn(warnings, "{} missing; using empty content".format(context))
         text = ""
     elif isinstance(value, str):
         text = value
     else:
-        warn(warnings, f"{context} should be text; converting from {type(value).__name__}")
+        warn(warnings, "{} should be text; converting from {}".format(context, type(value).__name__))
         text = str(value)
 
     encoded = text.encode("latin-1", errors="replace")
     if encoded.decode("latin-1") != text:
-        warn(warnings, f"{context} contains characters outside Latin-1; replaced with '?'")
+        warn(warnings, "{} contains characters outside Latin-1; replaced with '?'".format(context))
     return encoded
 
 
 def int_from_value(value: object, context: str, warnings: list[str], default: int = 0) -> int:
-    """Convert a value to an integer."""
+    """
+    Convert a value to an integer.
+    """
 
     if isinstance(value, int):
         return value
     if isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
         return int(value.strip())
     if value is None:
-        warn(warnings, f"{context} missing; using {default}")
+        warn(warnings, "{} missing; using {}".format(context, default))
     else:
-        warn(warnings, f"{context} should be an integer; using {default}")
+        warn(warnings, "{} should be an integer; using {}".format(context, default))
     return default
 
 
 def bool_from_value(value: object, context: str, warnings: list[str]) -> bool:
-    """Convert a value to a boolean."""
+    """
+    Convert a value to a boolean.
+    """
 
     if isinstance(value, bool):
         return value
@@ -834,30 +918,34 @@ def bool_from_value(value: object, context: str, warnings: list[str]) -> bool:
         if lower in ("false", "no", "0"):
             return False
     if value is None:
-        warn(warnings, f"{context} missing; using false")
+        warn(warnings, "{} missing; using false".format(context))
     else:
-        warn(warnings, f"{context} should be a boolean; using false")
+        warn(warnings, "{} should be a boolean; using false".format(context))
     return False
 
 
 def warn_unknown_keys(
     mapping: dict[str, object], expected: set[str], context: str, warnings: list[str]
 ) -> None:
-    """Warn about keys that are not recognised."""
+    """
+    Warn about keys that are not recognised.
+    """
 
     for key in sorted(mapping):
         if key not in expected:
-            warn(warnings, f"{context} has unexpected field {key!r}")
+            warn(warnings, "{} has unexpected field {!r}".format(context, key))
 
 
 def warn_missing_keys(
     mapping: dict[str, object], expected: set[str], context: str, warnings: list[str]
 ) -> None:
-    """Warn about expected keys that are not present."""
+    """
+    Warn about expected keys that are not present.
+    """
 
     for key in sorted(expected):
         if key not in mapping:
-            warn(warnings, f"{context} is missing expected field {key!r}")
+            warn(warnings, "{} is missing expected field {!r}".format(context, key))
 
 
 def load_attachment_bytes(
@@ -869,78 +957,82 @@ def load_attachment_bytes(
     warnings: list[str],
     text_mode: bool,
 ) -> bytes:
-    """Load attachment content from inline YAML or a detached file."""
+    """
+    Load attachment content from inline YAML or a detached file.
+    """
 
     if file_key in mapping:
         filename = mapping[file_key]
         if not isinstance(filename, str) or filename == "":
-            warn(warnings, f"{context}.{file_key} should name a file; using empty content")
+            warn(warnings, "{}.{} should name a file; using empty content".format(context, file_key))
             return b""
-        path = base_dir / filename
+        path = base_dir.joinpath(filename)
         try:
             return path.read_bytes()
         except OSError as exc:
-            warn(warnings, f"{context}.{file_key} could not be read from {path}: {exc}")
+            warn(warnings, "{}.{} could not be read from {}: {}".format(context, file_key, path, exc))
             return b""
 
     if inline_key not in mapping:
-        warn(warnings, f"{context}.{inline_key} missing; using empty content")
+        warn(warnings, "{}.{} missing; using empty content".format(context, inline_key))
         return b""
 
     value = mapping[inline_key]
     if text_mode:
-        return encode_attachment_text(value, f"{context}.{inline_key}", warnings)
+        return encode_attachment_text(value, "{}.{}".format(context, inline_key), warnings)
 
     if not isinstance(value, str):
-        warn(warnings, f"{context}.{inline_key} should be base64 text; using empty content")
+        warn(warnings, "{}.{} should be base64 text; using empty content".format(context, inline_key))
         return b""
     try:
         return base64.b64decode(value.encode("ascii"), validate=True)
     except (ValueError, UnicodeEncodeError) as exc:
-        warn(warnings, f"{context}.{inline_key} is not valid base64: {exc}")
+        warn(warnings, "{}.{} is not valid base64: {}".format(context, inline_key, exc))
         return b""
 
 
 def serialise_registration(
     registration: dict[str, object], index: int, base_dir: Path, warnings: list[str]
 ) -> bytes | None:
-    """Serialise one registration entry from YAML."""
+    """
+    Serialise one registration entry from YAML.
+    """
 
     if len(registration) != 1:
-        warn(warnings, f"Registration {index} should contain exactly one object type")
+        warn(warnings, "Registration {} should contain exactly one object type".format(index))
         return None
 
     raw_name, values = next(iter(registration.items()))
     object_name = OBJECT_ALIASES.get(raw_name)
     if object_name is None:
-        warn(warnings, f"Registration {index} has unknown type {raw_name!r}; skipping")
+        warn(warnings, "Registration {} has unknown type {!r}; skipping".format(index, raw_name))
         return None
     if not isinstance(values, dict):
-        warn(warnings, f"Registration {index} {object_name} content should be a mapping; skipping")
+        warn(warnings, "Registration {} {} content should be a mapping; skipping".format(index, object_name))
         return None
 
-    context = f"Registration {index} {object_name}"
+    context = "Registration {} {}".format(index, object_name)
 
     if object_name == "SWIChunk":
         expected = {"Prefix", "Description"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
         payload = (
-            encode_text_field(values.get("Prefix"), 20, f"{context}.Prefix", warnings)
-            + encode_text_field(values.get("Description"), 100, f"{context}.Description", warnings)
+            encode_text_field(values.get("Prefix"), 20, "{}.Prefix".format(context), warnings)
+            + encode_text_field(values.get("Description"), 100, "{}.Description".format(context), warnings)
         )
     elif object_name == "MessageBlock":
         expected = {"Description"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
-        payload = encode_text_field(values.get("Description"), 100, f"{context}.Description", warnings)
+        payload = encode_text_field(values.get("Description"), 100, "{}.Description".format(context), warnings)
     elif object_name == "Reservation":
         expected = {"Type", "Text"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
         payload = (
-            encode_text_field(values.get("Text"), 40, f"{context}.Text", warnings)
-            + encode_text_field(values.get("Type"), 20, f"{context}.Type", warnings)
+            encode_text_field(values.get("Text"), 40, "{}.Text".format(context), warnings)
+            + encode_text_field(values.get("Type"), 20, "{}.Type".format(context), warnings)
         )
     elif object_name == "Filetype":
         expected = {
@@ -962,11 +1054,11 @@ def serialise_registration(
         )
         warn_missing_keys(values, {"ApplicationName", "Name", "DoubleClicking"}, context, warnings)
         if "Sprite" in values and "SpriteFile" in values:
-            warn(warnings, f"{context} has both Sprite and SpriteFile; using SpriteFile")
+            warn(warnings, "{} has both Sprite and SpriteFile; using SpriteFile".format(context))
         if "ProductDescription" in values and "ProductDescriptionFile" in values:
-            warn(warnings, f"{context} has both ProductDescription and ProductDescriptionFile; using ProductDescriptionFile")
+            warn(warnings, "{} has both ProductDescription and ProductDescriptionFile; using ProductDescriptionFile".format(context))
         if "FormatDescription" in values and "FormatDescriptionFile" in values:
-            warn(warnings, f"{context} has both FormatDescription and FormatDescriptionFile; using FormatDescriptionFile")
+            warn(warnings, "{} has both FormatDescription and FormatDescriptionFile; using FormatDescriptionFile".format(context))
 
         sprite = load_attachment_bytes(
             values, "Sprite", "SpriteFile", base_dir, context, warnings, text_mode=False
@@ -992,11 +1084,11 @@ def serialise_registration(
 
         payload = b"".join(
             [
-                encode_text_field(values.get("ApplicationName"), 12, f"{context}.ApplicationName", warnings),
-                encode_text_field(values.get("Name"), 9, f"{context}.Name", warnings),
+                encode_text_field(values.get("ApplicationName"), 12, "{}.ApplicationName".format(context), warnings),
+                encode_text_field(values.get("Name"), 9, "{}.Name".format(context), warnings),
                 struct.pack(
                     "<i",
-                    1 if bool_from_value(values.get("DoubleClicking"), f"{context}.DoubleClicking", warnings) else 0,
+                    1 if bool_from_value(values.get("DoubleClicking"), "{}.DoubleClicking".format(context), warnings) else 0,
                 ),
                 struct.pack("<i", len(sprite)),
                 sprite,
@@ -1010,7 +1102,7 @@ def serialise_registration(
         expected = {"Description"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
-        payload = encode_text_field(values.get("Description"), 100, f"{context}.Description", warnings)
+        payload = encode_text_field(values.get("Description"), 100, "{}.Description".format(context), warnings)
     elif object_name == "Podule":
         expected = {"AllocateManufacturer", "ManufacturerId", "PoduleName", "Description"}
         warn_unknown_keys(
@@ -1021,66 +1113,68 @@ def serialise_registration(
         )
         warn_missing_keys(values, expected, context, warnings)
         allocate_manufacturer = bool_from_value(
-            values.get("AllocateManufacturer"), f"{context}.AllocateManufacturer", warnings
+            values.get("AllocateManufacturer"), "{}.AllocateManufacturer".format(context), warnings
         )
         manufacturer_id = int_from_value(
-            values.get("ManufacturerId"), f"{context}.ManufacturerId", warnings
+            values.get("ManufacturerId"), "{}.ManufacturerId".format(context), warnings
         )
         if not allocate_manufacturer and manufacturer_id == 0:
-            warn(warnings, f"{context}.ManufacturerId is expected when AllocateManufacturer is false")
+            warn(warnings, "{}.ManufacturerId is expected when AllocateManufacturer is false".format(context))
         payload = b"".join(
             [
                 struct.pack("<i", 1 if allocate_manufacturer else 0),
                 struct.pack("<i", manufacturer_id),
-                encode_text_field(values.get("PoduleName"), 20, f"{context}.PoduleName", warnings),
-                encode_text_field(values.get("Description"), 100, f"{context}.Description", warnings),
+                encode_text_field(values.get("PoduleName"), 20, "{}.PoduleName".format(context), warnings),
+                encode_text_field(values.get("Description"), 100, "{}.Description".format(context), warnings),
             ]
         )
     elif object_name == "DrawTagBlock":
         expected = {"Description"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
-        payload = encode_text_field(values.get("Description"), 100, f"{context}.Description", warnings)
+        payload = encode_text_field(values.get("Description"), 100, "{}.Description".format(context), warnings)
     elif object_name == "DrawObjectBlock":
         expected = {"Description"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
-        payload = encode_text_field(values.get("Description"), 100, f"{context}.Description", warnings)
+        payload = encode_text_field(values.get("Description"), 100, "{}.Description".format(context), warnings)
     elif object_name == "FilingSystem":
         expected = {"Name", "Selector", "Select"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, {"Name"}, context, warnings)
         if "Selector" not in values and "Select" not in values:
-            warn(warnings, f"{context} is missing expected field 'Selector'")
+            warn(warnings, "{} is missing expected field 'Selector'".format(context))
         selector = values.get("Selector", values.get("Select"))
         if "Select" in values and "Selector" not in values:
-            warn(warnings, f"{context}.Select is accepted for compatibility; prefer Selector")
+            warn(warnings, "{}.Select is accepted for compatibility; prefer Selector".format(context))
         payload = (
-            encode_text_field(values.get("Name"), 20, f"{context}.Name", warnings)
-            + encode_text_field(selector, 20, f"{context}.Selector", warnings)
+            encode_text_field(values.get("Name"), 20, "{}.Name".format(context), warnings)
+            + encode_text_field(selector, 20, "{}.Selector".format(context), warnings)
         )
     elif object_name == "ServiceBlock":
         expected = {"Description"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
-        payload = encode_text_field(values.get("Description"), 100, f"{context}.Description", warnings)
+        payload = encode_text_field(values.get("Description"), 100, "{}.Description".format(context), warnings)
     elif object_name == "Device":
         expected = {"Name", "Description"}
         warn_unknown_keys(values, expected, context, warnings)
         warn_missing_keys(values, expected, context, warnings)
         payload = (
-            encode_text_field(values.get("Name"), 20, f"{context}.Name", warnings)
-            + encode_text_field(values.get("Description"), 100, f"{context}.Description", warnings)
+            encode_text_field(values.get("Name"), 20, "{}.Name".format(context), warnings)
+            + encode_text_field(values.get("Description"), 100, "{}.Description".format(context), warnings)
         )
     else:
-        warn(warnings, f"Registration {index} type {object_name!r} is not supported")
+        warn(warnings, "Registration {} type {!r} is not supported".format(index, object_name))
         return None
 
     return OBJECT_HEADER_STRUCT.pack(OBJECT_NAME_TO_ID[object_name], len(payload)) + payload
 
 
 def parse_format_version(value: object, warnings: list[str]) -> int:
-    """Parse the YAML format version field."""
+    """
+    Parse the YAML format version field.
+    """
 
     if isinstance(value, int):
         return value
@@ -1099,10 +1193,12 @@ def parse_format_version(value: object, warnings: list[str]) -> int:
 
 
 def load_yaml_description(source: Path) -> tuple[dict[str, object], Path, list[str]]:
-    """Load a YAML description from a file or extracted directory."""
+    """
+    Load a YAML description from a file or extracted directory.
+    """
 
     if source.is_dir():
-        yaml_path = source / "Allocation.yaml"
+        yaml_path = source.joinpath("Allocation.yaml")
         base_dir = source
     else:
         yaml_path = source
@@ -1115,7 +1211,9 @@ def load_yaml_description(source: Path) -> tuple[dict[str, object], Path, list[s
 
 
 def build_allocate_binary(source: Path) -> tuple[bytes, list[str]]:
-    """Build a binary Allocate request file from YAML."""
+    """
+    Build a binary Allocate request file from YAML.
+    """
 
     data, base_dir, warnings = load_yaml_description(source)
     if not isinstance(data, dict):
@@ -1127,7 +1225,7 @@ def build_allocate_binary(source: Path) -> tuple[bytes, list[str]]:
     if schema_version is None:
         warn(warnings, "SchemaVersion missing; assuming version 1")
     elif schema_version != 1:
-        warn(warnings, f"SchemaVersion is {schema_version!r}; version 1 is expected")
+        warn(warnings, "SchemaVersion is {!r}; version 1 is expected".format(schema_version))
 
     version = parse_format_version(data.get("FormatVersion"), warnings)
 
@@ -1144,7 +1242,7 @@ def build_allocate_binary(source: Path) -> tuple[bytes, list[str]]:
     warn_missing_keys(developer, developer_expected, "Developer", warnings)
 
     details = b"".join(
-        encode_text_field(developer.get(label), size, f"Developer.{label}", warnings)
+        encode_text_field(developer.get(label), size, "Developer.{}".format(label), warnings)
         for label, _, size in DEVELOPER_FIELDS
     )
 
@@ -1159,7 +1257,7 @@ def build_allocate_binary(source: Path) -> tuple[bytes, list[str]]:
     object_data: list[bytes] = []
     for index, registration in enumerate(registrations, start=1):
         if not isinstance(registration, dict):
-            warn(warnings, f"Registration {index} should be a mapping; skipping")
+            warn(warnings, "Registration {} should be a mapping; skipping".format(index))
             continue
         object_bytes = serialise_registration(registration, index, base_dir, warnings)
         if object_bytes is not None:
@@ -1170,13 +1268,15 @@ def build_allocate_binary(source: Path) -> tuple[bytes, list[str]]:
 
 
 def display_file(parsed: dict[str, object]) -> None:
-    """Display a parsed Allocate file."""
+    """
+    Display a parsed Allocate file.
+    """
 
-    print(f"File: {parsed['path']}")
-    print(f"Format version: {format_version(parsed['version'])} ({parsed['version']})")
-    print(f"Objects: {parsed['object_count']}")
+    print("File: {}".format(parsed['path']))
+    print("Format version: {} ({})".format(format_version(parsed['version']), parsed['version']))
+    print("Objects: {}".format(parsed['object_count']))
     if parsed["trailing_bytes"]:
-        print(f"Trailing bytes: {parsed['trailing_bytes']}")
+        print("Trailing bytes: {}".format(parsed['trailing_bytes']))
     print()
 
     print("Developer details:")
@@ -1199,7 +1299,7 @@ def display_file(parsed: dict[str, object]) -> None:
 
     print("Objects:")
     for obj in parsed["objects"]:
-        print(f"  {obj['index']}. {obj['name']} (id={obj['id']}, size={obj['size']})")
+        print("  {}. {} (id={}, size={})".format(obj['index'], obj['name'], obj['id'], obj['size']))
         values = obj["values"]
         if obj["id"] == 3:
             print_key_value("Application name", values["application_name"], indent="     ")
@@ -1211,7 +1311,7 @@ def display_file(parsed: dict[str, object]) -> None:
             )
             for attachment in values["attachments"]:
                 print(
-                    f"     {attachment.kind.title()}: attached ({attachment.size} bytes)"
+                    "     {}: attached ({} bytes)".format(attachment.kind.title(), attachment.size)
                 )
             continue
 
@@ -1223,14 +1323,18 @@ def display_file(parsed: dict[str, object]) -> None:
 
 
 def print_warnings(warnings: list[str]) -> None:
-    """Emit warnings to stderr."""
+    """
+    Emit warnings to stderr.
+    """
 
     for message in warnings:
-        print(f"warning: {message}", file=sys.stderr)
+        print("warning: {}".format(message), file=sys.stderr)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the command line parser."""
+    """
+    Build the command line parser.
+    """
 
     parser = argparse.ArgumentParser(
         description="Display or convert Allocate request files."
@@ -1266,7 +1370,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the command line tool."""
+    """
+    Run the command line tool.
+    """
 
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1284,7 +1390,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             binary, warnings = build_allocate_binary(args.file)
         except (OSError, ParseError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
+            print("error: {}".format(exc), file=sys.stderr)
             return 1
 
         print_warnings(warnings)
@@ -1294,21 +1400,21 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 args.output.write_bytes(binary)
             except OSError as exc:
-                print(f"error: {exc}", file=sys.stderr)
+                print("error: {}".format(exc), file=sys.stderr)
                 return 1
         return 0
 
     try:
         parsed = parse_allocate_file(args.file)
     except (OSError, ParseError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print("error: {}".format(exc), file=sys.stderr)
         return 1
 
     if args.extract_files is not None:
         try:
             write_extract_files(parsed, args.extract_files)
         except OSError as exc:
-            print(f"error: {exc}", file=sys.stderr)
+            print("error: {}".format(exc), file=sys.stderr)
             return 1
         return 0
 
@@ -1320,7 +1426,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 args.output.write_text(yaml_text, encoding="utf-8")
             except OSError as exc:
-                print(f"error: {exc}", file=sys.stderr)
+                print("error: {}".format(exc), file=sys.stderr)
                 return 1
         return 0
 
